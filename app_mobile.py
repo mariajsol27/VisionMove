@@ -1,5 +1,5 @@
 # ============================================================
-# VISIONMOVE MOBILE
+# VISIONMOVE MOBILE - OPTIMIZADO PARA STREAMLIT CLOUD
 # Cámara en vivo + YOLO + distancia + voz + accesibilidad
 # Proyecto académico - Ingeniería Biomédica
 # ============================================================
@@ -22,7 +22,7 @@ from streamlit_webrtc import (
 
 
 # ============================================================
-# CONFIGURACIÓN DE LA PÁGINA
+# CONFIGURACIÓN DE PÁGINA
 # ============================================================
 
 st.set_page_config(
@@ -40,17 +40,22 @@ MODEL_NAME = "yolov8n.pt"
 
 CONFIDENCE = 0.40
 
-# Cada cuántos segundos se actualiza el mensaje
+# Cada cuántos segundos actualizar el mensaje de detección
 ANNOUNCE_EVERY = 3.0
 
 # IMPORTANTE:
-# Reemplaza 700.0 por el valor de calibración
-# cuando calibremos específicamente la cámara del celular.
+# Cambia este valor por el resultado de tu calibración móvil.
 FOCAL_LENGTH_PX = 700.0
+
+# Procesar solo 1 de cada N frames.
+PROCESS_EVERY_N_FRAMES = 3
+
+# Resolución usada internamente por YOLO.
+YOLO_IMAGE_SIZE = 320
 
 
 # ============================================================
-# ANCHOS APROXIMADOS DE OBJETOS EN METROS
+# ANCHOS REALES APROXIMADOS EN METROS
 # ============================================================
 
 ANCHOS_REALES = {
@@ -111,7 +116,7 @@ TRADUCCION = {
 
 
 # ============================================================
-# NIVEL DE RIESGO BASE
+# RIESGO BASE
 # ============================================================
 
 RIESGOS = {
@@ -138,7 +143,7 @@ RIESGOS = {
 
 
 # ============================================================
-# MODELO YOLO
+# CARGAR MODELO
 # ============================================================
 
 @st.cache_resource
@@ -150,7 +155,7 @@ modelo = cargar_modelo()
 
 
 # ============================================================
-# FUNCIONES
+# FUNCIONES DE APOYO
 # ============================================================
 
 def determinar_posicion(x_centro, ancho_imagen):
@@ -179,12 +184,10 @@ def calcular_distancia(nombre, ancho_px):
         FOCAL_LENGTH_PX
     ) / ancho_px
 
-    distancia = max(
+    return max(
         0.20,
         min(distancia, 15.0)
     )
-
-    return distancia
 
 
 def ajustar_riesgo(riesgo, distancia):
@@ -202,8 +205,6 @@ def ajustar_riesgo(riesgo, distancia):
 
 
 def color_riesgo(riesgo):
-    # OpenCV utiliza BGR
-
     if riesgo == "Alto":
         return (0, 0, 255)
 
@@ -256,7 +257,6 @@ def construir_mensaje(detecciones):
     if not detecciones:
         return None
 
-    # Máximo tres tipos de objetos
     objetos = objetos_unicos(
         detecciones
     )[:3]
@@ -299,7 +299,14 @@ class VisionMoveProcessor(VideoProcessorBase):
 
         self.latest_message = None
         self.latest_objects = []
+
         self.last_update = 0.0
+
+        self.frame_counter = 0
+
+        # Guardamos las últimas detecciones para dibujarlas
+        # también en frames que no procesamos con YOLO.
+        self.last_detections = []
 
 
     def recv(self, frame):
@@ -312,96 +319,152 @@ class VisionMoveProcessor(VideoProcessorBase):
             imagen.shape[:2]
         )
 
-        resultados = modelo.predict(
-            source=imagen,
-            conf=CONFIDENCE,
-            imgsz=640,
-            verbose=False,
-        )
+        self.frame_counter += 1
 
-        resultado = resultados[0]
+        # ====================================================
+        # PROCESAR YOLO SOLO 1 DE CADA 3 FRAMES
+        # ====================================================
 
-        detecciones = []
+        if (
+            self.frame_counter %
+            PROCESS_EVERY_N_FRAMES
+            == 0
+        ):
 
-        for caja in resultado.boxes:
-
-            coordenadas = (
-                caja.xyxy[0]
-                .cpu()
-                .numpy()
+            resultados = modelo.predict(
+                source=imagen,
+                conf=CONFIDENCE,
+                imgsz=YOLO_IMAGE_SIZE,
+                verbose=False,
             )
 
-            x1, y1, x2, y2 = coordenadas
+            resultado = resultados[0]
 
-            x1 = int(x1)
-            y1 = int(y1)
-            x2 = int(x2)
-            y2 = int(y2)
+            detecciones = []
 
-            clase_id = int(
-                caja.cls[0]
-                .cpu()
-                .numpy()
+            for caja in resultado.boxes:
+
+                coordenadas = (
+                    caja.xyxy[0]
+                    .cpu()
+                    .numpy()
+                )
+
+                x1, y1, x2, y2 = coordenadas
+
+                x1 = int(x1)
+                y1 = int(y1)
+                x2 = int(x2)
+                y2 = int(y2)
+
+                clase_id = int(
+                    caja.cls[0]
+                    .cpu()
+                    .numpy()
+                )
+
+                confianza = float(
+                    caja.conf[0]
+                    .cpu()
+                    .numpy()
+                )
+
+                nombre_original = (
+                    modelo.names[
+                        clase_id
+                    ]
+                )
+
+                nombre = TRADUCCION.get(
+                    nombre_original,
+                    nombre_original,
+                )
+
+                centro_x = (
+                    x1 + x2
+                ) / 2
+
+                posicion = determinar_posicion(
+                    centro_x,
+                    ancho_imagen,
+                )
+
+                ancho_objeto_px = (
+                    x2 - x1
+                )
+
+                distancia = calcular_distancia(
+                    nombre_original,
+                    ancho_objeto_px,
+                )
+
+                riesgo_base = RIESGOS.get(
+                    nombre_original,
+                    "Bajo",
+                )
+
+                riesgo = ajustar_riesgo(
+                    riesgo_base,
+                    distancia,
+                )
+
+                objeto = {
+                    "nombre": nombre,
+                    "nombre_original": nombre_original,
+                    "confianza": confianza,
+                    "posicion": posicion,
+                    "distancia": distancia,
+                    "riesgo": riesgo,
+                    "coords": (
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                    ),
+                }
+
+                detecciones.append(
+                    objeto
+                )
+
+            self.last_detections = (
+                detecciones
             )
 
-            confianza = float(
-                caja.conf[0]
-                .cpu()
-                .numpy()
+            tiempo_actual = time.time()
+
+            if (
+                tiempo_actual -
+                self.last_update
+                >= ANNOUNCE_EVERY
+            ):
+
+                mensaje = construir_mensaje(
+                    detecciones
+                )
+
+                with self.lock:
+                    self.latest_message = mensaje
+                    self.latest_objects = detecciones
+
+                self.last_update = (
+                    tiempo_actual
+                )
+
+        # ====================================================
+        # DIBUJAR LAS ÚLTIMAS DETECCIONES
+        # ====================================================
+
+        for objeto in self.last_detections:
+
+            x1, y1, x2, y2 = (
+                objeto["coords"]
             )
 
-            nombre_original = (
-                modelo.names[clase_id]
-            )
+            riesgo = objeto["riesgo"]
+            distancia = objeto["distancia"]
+            nombre = objeto["nombre"]
 
-            nombre = TRADUCCION.get(
-                nombre_original,
-                nombre_original,
-            )
-
-            # Posición
-            centro_x = (
-                x1 + x2
-            ) / 2
-
-            posicion = determinar_posicion(
-                centro_x,
-                ancho_imagen,
-            )
-
-            # Distancia
-            ancho_objeto_px = (
-                x2 - x1
-            )
-
-            distancia = calcular_distancia(
-                nombre_original,
-                ancho_objeto_px,
-            )
-
-            # Riesgo
-            riesgo_base = RIESGOS.get(
-                nombre_original,
-                "Bajo",
-            )
-
-            riesgo = ajustar_riesgo(
-                riesgo_base,
-                distancia,
-            )
-
-            objeto = {
-                "nombre": nombre,
-                "nombre_original": nombre_original,
-                "confianza": confianza,
-                "posicion": posicion,
-                "distancia": distancia,
-                "riesgo": riesgo,
-            }
-
-            detecciones.append(objeto)
-
-            # Dibujar detección
             color = color_riesgo(
                 riesgo
             )
@@ -411,7 +474,7 @@ class VisionMoveProcessor(VideoProcessorBase):
                 (x1, y1),
                 (x2, y2),
                 color,
-                3,
+                2,
             )
 
             if distancia is not None:
@@ -427,33 +490,15 @@ class VisionMoveProcessor(VideoProcessorBase):
                 etiqueta,
                 (
                     x1,
-                    max(30, y1 - 10),
+                    max(
+                        30,
+                        y1 - 10,
+                    ),
                 ),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.65,
+                0.55,
                 color,
                 2,
-            )
-
-        # Actualizar datos compartidos
-        tiempo_actual = time.time()
-
-        if (
-            tiempo_actual -
-            self.last_update
-            >= ANNOUNCE_EVERY
-        ):
-
-            mensaje = construir_mensaje(
-                detecciones
-            )
-
-            with self.lock:
-                self.latest_message = mensaje
-                self.latest_objects = detecciones
-
-            self.last_update = (
-                tiempo_actual
             )
 
         return av.VideoFrame.from_ndarray(
@@ -463,38 +508,65 @@ class VisionMoveProcessor(VideoProcessorBase):
 
 
 # ============================================================
-# ESTILOS DE ACCESIBILIDAD
+# ESTILO
 # ============================================================
 
 st.markdown(
-    f"""
-    <div
-        role="alert"
-        aria-live="assertive"
-        aria-atomic="true"
-        style="
-            background-color:#162d1d;
-            border:2px solid #25a244;
-            border-radius:12px;
-            padding:18px;
-            margin-top:10px;
-            margin-bottom:10px;
-            color:white;
-            font-size:22px;
-            font-weight:bold;
-        "
-    >
-        {mensaje}
-    </div>
+    """
+    <style>
+
+    .stApp {
+        background-color: #080808;
+        color: white;
+    }
+
+    .block-container {
+        padding-top: 1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: 850px;
+    }
+
+    h1, h2, h3, p, label {
+        color: white !important;
+    }
+
+    button {
+        min-height: 60px !important;
+        font-size: 20px !important;
+        font-weight: bold !important;
+    }
+
+    div[role="radiogroup"] label {
+        background-color: #1a1a1a !important;
+        border: 2px solid #555555 !important;
+        border-radius: 14px !important;
+        padding: 18px 20px !important;
+        margin-bottom: 12px !important;
+        min-height: 72px !important;
+        font-size: 24px !important;
+        font-weight: bold !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+
+    div[role="radiogroup"] label:hover {
+        border-color: #2196F3 !important;
+    }
+
+    </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
+
 
 # ============================================================
 # ENCABEZADO
 # ============================================================
 
-st.title("👁️ VisionMove")
+st.title(
+    "👁️ VisionMove"
+)
 
 st.write(
     """
@@ -505,7 +577,7 @@ st.write(
 
 
 # ============================================================
-# MENÚ PRINCIPAL
+# MENÚ
 # ============================================================
 
 seccion = st.radio(
@@ -531,8 +603,7 @@ if seccion == "🏠 Inicio":
     st.write(
         """
         VisionMove utiliza inteligencia artificial
-        para identificar objetos presentes en el entorno
-        y proporcionar información auditiva al usuario.
+        para identificar objetos presentes en el entorno.
         """
     )
 
@@ -564,8 +635,8 @@ if seccion == "🏠 Inicio":
                     "Bienvenido a VisionMove. "
                     + "Este sistema reconoce objetos del entorno "
                     + "y proporciona información mediante voz. "
-                    + "Para comenzar, seleccione la opción "
-                    + "Reconocimiento en el menú principal."
+                    + "Para comenzar, seleccione Reconocimiento "
+                    + "en el menú principal."
                 );
 
             mensaje.lang = "es-CO";
@@ -584,8 +655,8 @@ if seccion == "🏠 Inicio":
     st.info(
         """
         VisionMove es un prototipo académico.
-        No sustituye el bastón blanco, perro guía ni las
-        técnicas profesionales de orientación y movilidad.
+        No sustituye bastón blanco, perro guía ni técnicas
+        profesionales de orientación y movilidad.
         """
     )
 
@@ -604,15 +675,15 @@ elif seccion == "📖 Instrucciones":
         """
         **1.** Seleccione **Reconocimiento**.
 
-        **2.** Pulse el botón **START**.
+        **2.** Pulse **START**.
 
         **3.** Permita el acceso a la cámara.
 
-        **4.** Oriente el celular hacia el frente.
+        **4.** Oriente el teléfono hacia el frente.
 
         **5.** VisionMove comenzará a reconocer objetos.
 
-        **6.** Escuche el objeto, su posición y distancia aproximada.
+        **6.** Escuche la posición y distancia aproximada.
         """
     )
 
@@ -646,12 +717,9 @@ elif seccion == "📖 Instrucciones":
                     + "Paso dos. Pulse el botón Start. "
                     + "Paso tres. Permita el acceso a la cámara. "
                     + "Paso cuatro. Oriente la cámara hacia el frente. "
-                    + "Paso cinco. VisionMove comenzará "
-                    + "a reconocer objetos. "
-                    + "El sistema indicará por voz "
-                    + "si el objeto se encuentra a la izquierda, "
-                    + "al frente o a la derecha, "
-                    + "y su distancia aproximada."
+                    + "Paso cinco. VisionMove comenzará a reconocer objetos. "
+                    + "El sistema indicará por voz la posición "
+                    + "y distancia aproximada."
                 );
 
             mensaje.lang = "es-CO";
@@ -680,14 +748,10 @@ elif seccion == "📷 Reconocimiento":
 
     st.write(
         """
-        El control para iniciar la cámara se encuentra
-        inmediatamente después de la ayuda por voz.
+        El botón para comenzar la cámara aparece
+        después de la siguiente ayuda.
         """
     )
-
-    # --------------------------------------------------------
-    # AYUDA AUDITIVA PARA ENCONTRAR START
-    # --------------------------------------------------------
 
     components.html(
         """
@@ -714,11 +778,9 @@ elif seccion == "📷 Reconocimiento":
 
             const mensaje =
                 new SpeechSynthesisUtterance(
-                    "El botón para iniciar la cámara "
-                    + "se encuentra inmediatamente debajo "
-                    + "de este mensaje. "
-                    + "Deslice hacia abajo hasta encontrar "
-                    + "el botón Start y púlselo. "
+                    "El botón para comenzar se encuentra "
+                    + "inmediatamente debajo. "
+                    + "Deslice hacia abajo y pulse Start. "
                     + "Después permita el acceso a la cámara."
                 );
 
@@ -737,10 +799,10 @@ elif seccion == "📷 Reconocimiento":
 
     st.warning(
         """
-        Mantenga el dispositivo orientado hacia el frente
-        durante el reconocimiento.
+        Mantenga el teléfono orientado hacia el frente.
         """
     )
+
 
     # ========================================================
     # CÁMARA WEBRTC
@@ -769,8 +831,19 @@ elif seccion == "📷 Reconocimiento":
             "video": {
                 "facingMode": {
                     "ideal": "environment"
-                }
+                },
+                "width": {
+                    "ideal": 640
+                },
+                "height": {
+                    "ideal": 480
+                },
+                "frameRate": {
+                    "ideal": 10,
+                    "max": 12
+                },
             },
+
             "audio": False,
         },
 
@@ -779,7 +852,7 @@ elif seccion == "📷 Reconocimiento":
 
 
     # ========================================================
-    # MEMORIA DEL MENSAJE
+    # SESSION STATE
     # ========================================================
 
     if (
@@ -792,10 +865,12 @@ elif seccion == "📷 Reconocimiento":
 
 
     # ========================================================
-    # ACTUALIZAR RESULTADOS
+    # RESULTADOS
     # ========================================================
 
-    @st.fragment(run_every=1.0)
+    @st.fragment(
+        run_every=1.0
+    )
     def actualizar_resultado():
 
         if not ctx.state.playing:
@@ -836,11 +911,31 @@ elif seccion == "📷 Reconocimiento":
 
 
         # ----------------------------------------------------
-        # MENSAJE VISUAL
+        # MENSAJE ACCESIBLE
         # ----------------------------------------------------
 
-        st.success(
-            mensaje
+        st.markdown(
+            f"""
+            <div
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+                style="
+                    background-color:#162d1d;
+                    border:2px solid #25a244;
+                    border-radius:12px;
+                    padding:18px;
+                    margin-top:10px;
+                    margin-bottom:10px;
+                    color:white;
+                    font-size:20px;
+                    font-weight:bold;
+                "
+            >
+                {mensaje}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
 
@@ -849,7 +944,9 @@ elif seccion == "📷 Reconocimiento":
         # ----------------------------------------------------
 
         identificador = hashlib.md5(
-            mensaje.encode("utf-8")
+            mensaje.encode(
+                "utf-8"
+            )
         ).hexdigest()
 
 
@@ -898,7 +995,7 @@ elif seccion == "📷 Reconocimiento":
 
 
         # ----------------------------------------------------
-        # OBJETOS DETECTADOS
+        # DETALLES
         # ----------------------------------------------------
 
         if objetos:
@@ -936,7 +1033,7 @@ elif seccion == "📷 Reconocimiento":
 
 
 # ============================================================
-# PIE DE PÁGINA
+# PIE
 # ============================================================
 
 st.divider()

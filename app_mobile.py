@@ -467,55 +467,28 @@ class VisionMoveProcessor(VideoProcessorBase):
 # ============================================================
 
 st.markdown(
-    """
-    <style>
-
-    .stApp {
-        background-color: #080808;
-        color: white;
-    }
-
-    .block-container {
-        padding-top: 1rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
-        max-width: 850px;
-    }
-
-    h1, h2, h3, p, label {
-        color: white !important;
-    }
-
-    /* Botones normales */
-    button {
-        min-height: 60px !important;
-        font-size: 20px !important;
-        font-weight: bold !important;
-    }
-
-    /* Menú Inicio / Instrucciones / Reconocimiento */
-    div[role="radiogroup"] label {
-        background-color: #1a1a1a !important;
-        border: 2px solid #555555 !important;
-        border-radius: 14px !important;
-        padding: 18px 20px !important;
-        margin-bottom: 12px !important;
-        min-height: 72px !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
-        display: flex !important;
-        align-items: center !important;
-    }
-
-    div[role="radiogroup"] label:hover {
-        border-color: #2196F3 !important;
-    }
-
-    </style>
+    f"""
+    <div
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+        style="
+            background-color:#162d1d;
+            border:2px solid #25a244;
+            border-radius:12px;
+            padding:18px;
+            margin-top:10px;
+            margin-bottom:10px;
+            color:white;
+            font-size:22px;
+            font-weight:bold;
+        "
+    >
+        {mensaje}
+    </div>
     """,
-    unsafe_allow_html=True,
+    unsafe_allow_html=True
 )
-
 
 # ============================================================
 # ENCABEZADO

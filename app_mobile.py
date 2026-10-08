@@ -40,22 +40,23 @@ MODEL_NAME = "yolov8n.pt"
 
 CONFIDENCE = 0.40
 
-# Cada cuántos segundos actualizar el mensaje de detección
+# Cada cuántos segundos actualizar el mensaje
 ANNOUNCE_EVERY = 3.0
 
 # IMPORTANTE:
-# Cambia este valor por el resultado de tu calibración móvil.
+# Valor de referencia. La estimación de distancia es aproximada.
 FOCAL_LENGTH_PX = 700.0
 
-# Procesar solo 1 de cada N frames.
+# Procesar solo 1 de cada N frames
 PROCESS_EVERY_N_FRAMES = 3
 
-# Resolución usada internamente por YOLO.
+# Resolución utilizada por YOLO
 YOLO_IMAGE_SIZE = 320
 
 
 # ============================================================
 # ANCHOS REALES APROXIMADOS EN METROS
+# Objetos para los cuales VisionMove puede estimar distancia
 # ============================================================
 
 ANCHOS_REALES = {
@@ -124,6 +125,7 @@ RIESGOS = {
     "chair": "Alto",
     "couch": "Alto",
     "dining table": "Alto",
+    "bench": "Alto",
     "backpack": "Alto",
     "suitcase": "Alto",
     "bicycle": "Alto",
@@ -159,6 +161,7 @@ modelo = cargar_modelo()
 # ============================================================
 
 def determinar_posicion(x_centro, ancho_imagen):
+
     proporcion = x_centro / ancho_imagen
 
     if proporcion < 0.33:
@@ -171,6 +174,7 @@ def determinar_posicion(x_centro, ancho_imagen):
 
 
 def calcular_distancia(nombre, ancho_px):
+
     if ancho_px <= 0:
         return None
 
@@ -191,10 +195,14 @@ def calcular_distancia(nombre, ancho_px):
 
 
 def ajustar_riesgo(riesgo, distancia):
+
     if distancia is None:
         return riesgo
 
+    # Cuando el objeto está muy cerca,
+    # aumenta un nivel de riesgo.
     if distancia < 1.0:
+
         if riesgo == "Bajo":
             return "Medio"
 
@@ -205,16 +213,20 @@ def ajustar_riesgo(riesgo, distancia):
 
 
 def color_riesgo(riesgo):
+
+    # OpenCV utiliza formato BGR
+
     if riesgo == "Alto":
-        return (0, 0, 255)
+        return (0, 0, 255)       # Rojo
 
     if riesgo == "Medio":
-        return (0, 215, 255)
+        return (0, 215, 255)     # Amarillo
 
-    return (0, 255, 0)
+    return (0, 255, 0)           # Verde
 
 
 def ordenar_detecciones(detecciones):
+
     prioridad = {
         "Alto": 0,
         "Medio": 1,
@@ -238,12 +250,14 @@ def ordenar_detecciones(detecciones):
 
 
 def objetos_unicos(detecciones):
+
     resultado = []
     utilizados = set()
 
     for objeto in ordenar_detecciones(
         detecciones
     ):
+
         nombre = objeto["nombre_original"]
 
         if nombre not in utilizados:
@@ -253,7 +267,12 @@ def objetos_unicos(detecciones):
     return resultado
 
 
+# ============================================================
+# CONSTRUCCIÓN DEL MENSAJE AUDITIVO
+# ============================================================
+
 def construir_mensaje(detecciones):
+
     if not detecciones:
         return None
 
@@ -264,24 +283,39 @@ def construir_mensaje(detecciones):
     frases = []
 
     for objeto in objetos:
+
         nombre = objeto["nombre"]
         posicion = objeto["posicion"]
         distancia = objeto["distancia"]
         riesgo = objeto["riesgo"]
 
         if distancia is not None:
+
             frase = (
                 f"{nombre} {posicion}, "
                 f"a aproximadamente "
                 f"{distancia:.1f} metros"
             )
+
         else:
+
             frase = (
                 f"{nombre} {posicion}"
             )
 
+        # Mensaje según nivel de riesgo
         if riesgo == "Alto":
-            frase += ", precaución"
+
+            frase += (
+                ", alerta de riesgo alto, "
+                "precaución"
+            )
+
+        elif riesgo == "Medio":
+
+            frase += (
+                ", alerta de riesgo medio"
+            )
 
         frases.append(frase)
 
@@ -295,6 +329,7 @@ def construir_mensaje(detecciones):
 class VisionMoveProcessor(VideoProcessorBase):
 
     def __init__(self):
+
         self.lock = threading.Lock()
 
         self.latest_message = None
@@ -304,8 +339,6 @@ class VisionMoveProcessor(VideoProcessorBase):
 
         self.frame_counter = 0
 
-        # Guardamos las últimas detecciones para dibujarlas
-        # también en frames que no procesamos con YOLO.
         self.last_detections = []
 
 
@@ -320,6 +353,7 @@ class VisionMoveProcessor(VideoProcessorBase):
         )
 
         self.frame_counter += 1
+
 
         # ====================================================
         # PROCESAR YOLO SOLO 1 DE CADA 3 FRAMES
@@ -342,6 +376,7 @@ class VisionMoveProcessor(VideoProcessorBase):
 
             detecciones = []
 
+
             for caja in resultado.boxes:
 
                 coordenadas = (
@@ -357,11 +392,13 @@ class VisionMoveProcessor(VideoProcessorBase):
                 x2 = int(x2)
                 y2 = int(y2)
 
+
                 clase_id = int(
                     caja.cls[0]
                     .cpu()
                     .numpy()
                 )
+
 
                 confianza = float(
                     caja.conf[0]
@@ -369,52 +406,73 @@ class VisionMoveProcessor(VideoProcessorBase):
                     .numpy()
                 )
 
+
                 nombre_original = (
                     modelo.names[
                         clase_id
                     ]
                 )
 
+
                 nombre = TRADUCCION.get(
                     nombre_original,
                     nombre_original,
                 )
 
+
                 centro_x = (
                     x1 + x2
                 ) / 2
+
 
                 posicion = determinar_posicion(
                     centro_x,
                     ancho_imagen,
                 )
 
+
                 ancho_objeto_px = (
                     x2 - x1
                 )
+
 
                 distancia = calcular_distancia(
                     nombre_original,
                     ancho_objeto_px,
                 )
 
+
                 riesgo_base = RIESGOS.get(
                     nombre_original,
                     "Bajo",
                 )
+
 
                 riesgo = ajustar_riesgo(
                     riesgo_base,
                     distancia,
                 )
 
+
                 objeto = {
+
                     "nombre": nombre,
-                    "nombre_original": nombre_original,
-                    "confianza": confianza,
-                    "posicion": posicion,
-                    "distancia": distancia,
-                    "riesgo": riesgo,
+
+                    "nombre_original":
+                        nombre_original,
+
+                    "confianza":
+                        confianza,
+
+                    "posicion":
+                        posicion,
+
+                    "distancia":
+                        distancia,
+
+                    "riesgo":
+                        riesgo,
+
                     "coords": (
                         x1,
                         y1,
@@ -423,15 +481,19 @@ class VisionMoveProcessor(VideoProcessorBase):
                     ),
                 }
 
+
                 detecciones.append(
                     objeto
                 )
+
 
             self.last_detections = (
                 detecciones
             )
 
+
             tiempo_actual = time.time()
+
 
             if (
                 tiempo_actual -
@@ -443,16 +505,25 @@ class VisionMoveProcessor(VideoProcessorBase):
                     detecciones
                 )
 
+
                 with self.lock:
-                    self.latest_message = mensaje
-                    self.latest_objects = detecciones
+
+                    self.latest_message = (
+                        mensaje
+                    )
+
+                    self.latest_objects = (
+                        detecciones
+                    )
+
 
                 self.last_update = (
                     tiempo_actual
                 )
 
+
         # ====================================================
-        # DIBUJAR LAS ÚLTIMAS DETECCIONES
+        # DIBUJAR DETECCIONES
         # ====================================================
 
         for objeto in self.last_detections:
@@ -465,9 +536,11 @@ class VisionMoveProcessor(VideoProcessorBase):
             distancia = objeto["distancia"]
             nombre = objeto["nombre"]
 
+
             color = color_riesgo(
                 riesgo
             )
+
 
             cv2.rectangle(
                 imagen,
@@ -477,13 +550,22 @@ class VisionMoveProcessor(VideoProcessorBase):
                 2,
             )
 
+
             if distancia is not None:
+
                 etiqueta = (
                     f"{nombre} | "
-                    f"{distancia:.1f} m"
+                    f"{distancia:.1f} m | "
+                    f"{riesgo}"
                 )
+
             else:
-                etiqueta = nombre
+
+                etiqueta = (
+                    f"{nombre} | "
+                    f"{riesgo}"
+                )
+
 
             cv2.putText(
                 imagen,
@@ -496,10 +578,11 @@ class VisionMoveProcessor(VideoProcessorBase):
                     ),
                 ),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.55,
+                0.50,
                 color,
                 2,
             )
+
 
         return av.VideoFrame.from_ndarray(
             imagen,
@@ -508,7 +591,7 @@ class VisionMoveProcessor(VideoProcessorBase):
 
 
 # ============================================================
-# ESTILO
+# ESTILO DE LA APLICACIÓN
 # ============================================================
 
 st.markdown(
@@ -554,6 +637,39 @@ st.markdown(
         border-color: #2196F3 !important;
     }
 
+    .info-proyecto {
+        background-color: #151515;
+        border: 2px solid #1565C0;
+        border-radius: 15px;
+        padding: 18px;
+        margin-top: 10px;
+        margin-bottom: 20px;
+    }
+
+    .alerta-verde {
+        background-color: #123d1d;
+        border-left: 6px solid #00c853;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    .alerta-amarilla {
+        background-color: #4a3b00;
+        border-left: 6px solid #ffd600;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
+    .alerta-roja {
+        background-color: #471414;
+        border-left: 6px solid #ff1744;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+    }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -586,6 +702,7 @@ seccion = st.radio(
         "🏠 Inicio",
         "📖 Instrucciones",
         "📷 Reconocimiento",
+        "📚 Bibliografía",
     ],
 )
 
@@ -600,12 +717,47 @@ if seccion == "🏠 Inicio":
         "Bienvenido a VisionMove"
     )
 
+    # --------------------------------------------------------
+    # INFORMACIÓN ACADÉMICA
+    # --------------------------------------------------------
+
+    st.markdown(
+        """
+        <div class="info-proyecto">
+
+        <h3>Información del proyecto</h3>
+
+        <b>Universidad:</b> ECCI<br><br>
+
+        <b>Curso:</b> Biomecánica 9AN<br><br>
+
+        <b>Profesora:</b> Juana Yadira Martín Perico<br><br>
+
+        <b>Autores:</b><br>
+        Lorena Perez<br>
+        Jonathan Villamizar<br>
+        María Fernanda Patarroyo<br>
+        María José Díaz
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
     st.write(
         """
-        VisionMove utiliza inteligencia artificial
-        para identificar objetos presentes en el entorno.
+        VisionMove utiliza inteligencia artificial y visión
+        por computadora para identificar objetos presentes en
+        el entorno y proporcionar información sobre su posición,
+        distancia aproximada y nivel de riesgo.
         """
     )
+
+
+    # --------------------------------------------------------
+    # BOTÓN DE VOZ
+    # --------------------------------------------------------
 
     components.html(
         """
@@ -622,19 +774,24 @@ if seccion == "🏠 Inicio":
                 font-weight:bold;
             "
         >
-            🔊 Escuchar instrucciones
+            🔊 Escuchar información
         </button>
 
         <script>
+
         function hablarInicio() {
 
             window.speechSynthesis.cancel();
 
             const mensaje =
                 new SpeechSynthesisUtterance(
+
                     "Bienvenido a VisionMove. "
-                    + "Este sistema reconoce objetos del entorno "
-                    + "y proporciona información mediante voz. "
+
+                    + "Este sistema reconoce objetos del entorno, "
+                    + "estima su distancia y proporciona información "
+                    + "mediante voz. "
+
                     + "Para comenzar, seleccione Reconocimiento "
                     + "en el menú principal."
                 );
@@ -647,16 +804,72 @@ if seccion == "🏠 Inicio":
                 mensaje
             );
         }
+
         </script>
         """,
         height=90,
     )
 
+
+    # --------------------------------------------------------
+    # OBJETOS CON ESTIMACIÓN DE DISTANCIA
+    # --------------------------------------------------------
+
+    st.subheader(
+        "📏 Objetos con estimación de distancia"
+    )
+
+    st.write(
+        """
+        VisionMove puede realizar una **estimación aproximada
+        de distancia** para los siguientes objetos:
+        """
+    )
+
+    st.markdown(
+        """
+        **Personas y animales**
+        - Persona
+        - Perro
+        - Gato
+
+        **Mobiliario y objetos del entorno**
+        - Silla
+        - Sofá
+        - Mesa
+        - Banca
+        - Mochila
+        - Maleta
+        - Botella
+        - Celular
+        - Computador portátil
+        - Libro
+        - Televisor
+
+        **Medios de transporte**
+        - Bicicleta
+        - Motocicleta
+        - Automóvil
+        - Bus
+        - Camión
+        """
+    )
+
+
     st.info(
         """
-        VisionMove es un prototipo académico.
-        No sustituye bastón blanco, perro guía ni técnicas
-        profesionales de orientación y movilidad.
+        📌 La distancia indicada por VisionMove es aproximada.
+        Puede variar según el tamaño real del objeto,
+        la cámara utilizada y las condiciones de captura.
+        """
+    )
+
+
+    st.warning(
+        """
+        VisionMove es un prototipo académico de asistencia.
+        No sustituye el bastón blanco, perro guía ni las
+        técnicas profesionales de orientación y movilidad.
         """
     )
 
@@ -671,11 +884,12 @@ elif seccion == "📖 Instrucciones":
         "📖 Instrucciones de uso"
     )
 
+
     st.markdown(
         """
         **1.** Seleccione **Reconocimiento**.
 
-        **2.** Pulse **START**.
+        **2.** Pulse el botón **START**.
 
         **3.** Permita el acceso a la cámara.
 
@@ -683,9 +897,62 @@ elif seccion == "📖 Instrucciones":
 
         **5.** VisionMove comenzará a reconocer objetos.
 
-        **6.** Escuche la posición y distancia aproximada.
+        **6.** El sistema indicará el objeto, su posición y,
+        cuando esté disponible, su distancia aproximada.
+
+        **7.** Preste atención al nivel de alerta indicado
+        por el sistema.
         """
     )
+
+
+    # --------------------------------------------------------
+    # TIPOS DE ALERTA
+    # --------------------------------------------------------
+
+    st.subheader(
+        "🚦 Tipos de alertas"
+    )
+
+
+    st.markdown(
+        """
+        <div class="alerta-verde">
+        🟢 <b>Riesgo bajo:</b>
+        el objeto fue identificado y no representa una
+        advertencia prioritaria según la clasificación
+        configurada en la aplicación.
+        </div>
+
+        <div class="alerta-amarilla">
+        🟡 <b>Riesgo medio:</b>
+        indica que el objeto requiere mayor atención,
+        especialmente cuando se encuentra cerca del usuario.
+        </div>
+
+        <div class="alerta-roja">
+        🔴 <b>Riesgo alto:</b>
+        corresponde a objetos considerados prioritarios
+        durante el desplazamiento. El sistema genera una
+        advertencia de precaución.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+    st.write(
+        """
+        En la imagen de la cámara, los cuadros de detección
+        también cambian de color según el nivel de riesgo:
+        **verde, amarillo o rojo**.
+        """
+    )
+
+
+    # --------------------------------------------------------
+    # VOZ DE INSTRUCCIONES
+    # --------------------------------------------------------
 
     components.html(
         """
@@ -706,20 +973,39 @@ elif seccion == "📖 Instrucciones":
         </button>
 
         <script>
+
         function leerInstrucciones() {
 
             window.speechSynthesis.cancel();
 
             const mensaje =
                 new SpeechSynthesisUtterance(
+
                     "Instrucciones de VisionMove. "
+
                     + "Paso uno. Seleccione Reconocimiento. "
+
                     + "Paso dos. Pulse el botón Start. "
+
                     + "Paso tres. Permita el acceso a la cámara. "
+
                     + "Paso cuatro. Oriente la cámara hacia el frente. "
-                    + "Paso cinco. VisionMove comenzará a reconocer objetos. "
-                    + "El sistema indicará por voz la posición "
-                    + "y distancia aproximada."
+
+                    + "Paso cinco. VisionMove comenzará "
+                    + "a reconocer objetos. "
+
+                    + "El sistema indicará el objeto detectado, "
+                    + "su posición y distancia aproximada. "
+
+                    + "VisionMove utiliza tres niveles de alerta. "
+
+                    + "Verde corresponde a riesgo bajo. "
+
+                    + "Amarillo corresponde a riesgo medio "
+                    + "y requiere mayor atención. "
+
+                    + "Rojo corresponde a riesgo alto "
+                    + "y genera una advertencia de precaución."
                 );
 
             mensaje.lang = "es-CO";
@@ -730,6 +1016,7 @@ elif seccion == "📖 Instrucciones":
                 mensaje
             );
         }
+
         </script>
         """,
         height=90,
@@ -746,12 +1033,14 @@ elif seccion == "📷 Reconocimiento":
         "📷 Reconocimiento del entorno"
     )
 
+
     st.write(
         """
         El botón para comenzar la cámara aparece
         después de la siguiente ayuda.
         """
     )
+
 
     components.html(
         """
@@ -772,15 +1061,19 @@ elif seccion == "📷 Reconocimiento":
         </button>
 
         <script>
+
         function indicarInicio() {
 
             window.speechSynthesis.cancel();
 
             const mensaje =
                 new SpeechSynthesisUtterance(
+
                     "El botón para comenzar se encuentra "
                     + "inmediatamente debajo. "
+
                     + "Deslice hacia abajo y pulse Start. "
+
                     + "Después permita el acceso a la cámara."
                 );
 
@@ -792,10 +1085,12 @@ elif seccion == "📷 Reconocimiento":
                 mensaje
             );
         }
+
         </script>
         """,
         height=90,
     )
+
 
     st.warning(
         """
@@ -809,6 +1104,7 @@ elif seccion == "📷 Reconocimiento":
     # ========================================================
 
     ctx = webrtc_streamer(
+
         key="visionmove-mobile",
 
         mode=WebRtcMode.SENDRECV,
@@ -828,16 +1124,21 @@ elif seccion == "📷 Reconocimiento":
         },
 
         media_stream_constraints={
+
             "video": {
+
                 "facingMode": {
                     "ideal": "environment"
                 },
+
                 "width": {
                     "ideal": 640
                 },
+
                 "height": {
                     "ideal": 480
                 },
+
                 "frameRate": {
                     "ideal": 10,
                     "max": 12
@@ -859,6 +1160,7 @@ elif seccion == "📷 Reconocimiento":
         "ultimo_mensaje_hablado"
         not in st.session_state
     ):
+
         st.session_state[
             "ultimo_mensaje_hablado"
         ] = ""
@@ -885,6 +1187,7 @@ elif seccion == "📷 Reconocimiento":
         procesador = (
             ctx.video_processor
         )
+
 
         if procesador is None:
             return
@@ -965,6 +1268,7 @@ elif seccion == "📷 Reconocimiento":
                 .replace("\n", " ")
             )
 
+
             components.html(
                 f"""
                 <script>
@@ -988,6 +1292,7 @@ elif seccion == "📷 Reconocimiento":
                 """,
                 height=1,
             )
+
 
             st.session_state[
                 "ultimo_mensaje_hablado"
@@ -1033,13 +1338,61 @@ elif seccion == "📷 Reconocimiento":
 
 
 # ============================================================
-# PIE
+# BIBLIOGRAFÍA
+# ============================================================
+
+elif seccion == "📚 Bibliografía":
+
+    st.header(
+        "📚 Bibliografía"
+    )
+
+
+    st.markdown(
+        """
+**Organización Mundial de la Salud. (2026, 10 de febrero).**  
+*Discapacidad visual y ceguera.*  
+https://www.who.int/es/news-room/fact-sheets/detail/blindness-and-visual-impairment
+
+---
+
+**Rasouli Kahaki, Z., Safarpour, A. R., & Daneshmandi, H. (2023).**  
+The spatiotemporal gait parameters among people with visual impairment: A literature review study.  
+*Oman Journal of Ophthalmology, 16*(3), 427–433.  
+https://doi.org/10.4103/ojo.ojo_24_23
+
+---
+
+**Abidi, M. H., Siddiquee, A. N., Alkhalefah, H., & Srivastava, V. (2024).**  
+A comprehensive review of navigation systems for visually impaired individuals.  
+*Heliyon, 10*(11), e31825.  
+https://doi.org/10.1016/j.heliyon.2024.e31825
+
+---
+
+**More, P., & Sangamkar, S. (2024).**  
+Vision Aid For Blind People Using YOLOV8.  
+*2024 2nd International Conference on Networking, Embedded and Wireless Systems (ICNEWS).*  
+https://doi.org/10.1109/ICNEWS60873.2024.10731132
+
+---
+
+**Bai, Z., Yang, Y., Wang, J., Li, Z., Wang, J., & Liu, C. (2024).**  
+Enhanced lightweight infrared object detection algorithm for assistive navigation in visually impaired individuals.  
+*IET Image Processing, 18*(14), 4824–4842.  
+https://doi.org/10.1049/ipr2.13233
+        """
+    )
+
+
+# ============================================================
+# PIE DE PÁGINA
 # ============================================================
 
 st.divider()
 
 st.caption(
     """
-    VisionMove • Prototipo académico de Ingeniería Biomédica
+    VisionMove • Universidad ECCI • Biomecánica 9AN
     """
 )

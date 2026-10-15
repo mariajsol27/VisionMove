@@ -923,59 +923,63 @@ if seccion == "🏠 Inicio":
 # OBJETOS ADICIONALES
 # ========================================================
 
-st.markdown(
-    """
-    ### 🔎 Objetos adicionales reconocidos
+# ========================================================
+    # OBJETOS ADICIONALES
+    # ========================================================
 
-    Para estos objetos VisionMove puede indicar
-    **qué objeto es, su posición y su nivel de alerta**,
-    aunque no se calcula distancia aproximada.
+    st.markdown(
+        """
+        ### 🔎 Objetos adicionales reconocidos
 
-    **Animales**
-    - Pájaro
-    - Caballo
-    - Oveja
-    - Vaca
-    - Elefante
-    - Oso
-    - Cebra
-    - Jirafa
+        Para estos objetos VisionMove puede indicar
+        **qué objeto es, su posición y su nivel de alerta**,
+        aunque no se calcula distancia aproximada.
 
-    **Transporte**
-    - Tren
-    - Avión
-    - Bote
+        **Animales**
+        - Pájaro
+        - Caballo
+        - Oveja
+        - Vaca
+        - Elefante
+        - Oso
+        - Cebra
+        - Jirafa
 
-    **Elementos de tránsito**
-    - Semáforo
-    - Señal de pare
-    - Parquímetro
-    - Hidrante
+        **Transporte**
+        - Tren
+        - Avión
+        - Bote
 
-    **Objetos personales**
-    - Bolso
-    - Paraguas
-    - Corbata
+        **Elementos de tránsito**
+        - Semáforo
+        - Señal de pare
+        - Parquímetro
+        - Hidrante
 
-    **Tecnología y hogar**
-    - Teclado
-    - Mouse
-    - Planta en maceta
-    - Microondas
-    - Refrigerador
-    - Reloj
+        **Objetos personales**
+        - Bolso
+        - Paraguas
+        - Corbata
 
-    **Deporte y recreación**
-    - Frisbee
-    - Pelota
-    - Patineta
-    - Tabla de surf
-    - Raqueta de tenis
+        **Tecnología y hogar**
+        - Teclado
+        - Mouse
+        - Planta en maceta
+        - Microondas
+        - Refrigerador
+        - Reloj
 
-    **Otros**
-    - Taza
-    """
-   )
+        **Deporte y recreación**
+        - Frisbee
+        - Pelota
+        - Patineta
+        - Tabla de surf
+        - Raqueta de tenis
+
+        **Otros**
+        - Taza
+        """
+    )
 
 
     st.info(
@@ -994,8 +998,6 @@ st.markdown(
         técnicas profesionales de orientación y movilidad.
         """
     )
-
-
 # ============================================================
 # INSTRUCCIONES
 # ============================================================

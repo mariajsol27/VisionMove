@@ -975,7 +975,7 @@ st.markdown(
     **Otros**
     - Taza
     """
-)
+   )
 
 
     st.info(

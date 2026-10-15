@@ -87,6 +87,7 @@ ANCHOS_REALES = {
 # ============================================================
 
 TRADUCCION = {
+    # OBJETOS YA CONFIGURADOS
     "person": "persona",
     "bicycle": "bicicleta",
     "car": "automóvil",
@@ -113,14 +114,43 @@ TRADUCCION = {
     "cat": "gato",
     "potted plant": "planta",
     "tv": "televisor",
-}
 
+    # NUEVOS OBJETOS
+    "bird": "pájaro",
+    "horse": "caballo",
+    "sheep": "oveja",
+    "cow": "vaca",
+    "elephant": "elefante",
+    "bear": "oso",
+    "zebra": "cebra",
+    "giraffe": "jirafa",
+
+    "traffic light": "semáforo",
+    "stop sign": "señal de pare",
+    "parking meter": "parquímetro",
+    "fire hydrant": "hidrante",
+
+    "train": "tren",
+    "airplane": "avión",
+    "boat": "bote",
+
+    "tie": "corbata",
+    "frisbee": "frisbee",
+    "sports ball": "pelota",
+    "skateboard": "patineta",
+    "surfboard": "tabla de surf",
+    "tennis racket": "raqueta de tenis",
+
+    "microwave": "microondas",
+    "refrigerator": "refrigerador",
+}
 
 # ============================================================
 # RIESGO BASE
 # ============================================================
 
 RIESGOS = {
+    # CONFIGURACIÓN ORIGINAL
     "person": "Medio",
     "chair": "Alto",
     "couch": "Alto",
@@ -141,8 +171,43 @@ RIESGOS = {
     "book": "Bajo",
     "laptop": "Bajo",
     "tv": "Bajo",
-}
 
+    # NUEVOS OBJETOS
+    "handbag": "Medio",
+    "cup": "Bajo",
+    "keyboard": "Bajo",
+    "mouse": "Bajo",
+    "potted plant": "Alto",
+    "umbrella": "Medio",
+
+    "bird": "Bajo",
+    "horse": "Alto",
+    "sheep": "Medio",
+    "cow": "Alto",
+    "elephant": "Alto",
+    "bear": "Alto",
+    "zebra": "Alto",
+    "giraffe": "Alto",
+
+    "traffic light": "Medio",
+    "stop sign": "Medio",
+    "parking meter": "Medio",
+    "fire hydrant": "Alto",
+
+    "train": "Alto",
+    "airplane": "Alto",
+    "boat": "Alto",
+
+    "tie": "Bajo",
+    "frisbee": "Bajo",
+    "sports ball": "Alto",
+    "skateboard": "Alto",
+    "surfboard": "Medio",
+    "tennis racket": "Bajo",
+
+    "microwave": "Bajo",
+    "refrigerator": "Alto",
+}
 
 # ============================================================
 # CARGAR MODELO

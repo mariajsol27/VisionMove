@@ -919,6 +919,63 @@ if seccion == "🏠 Inicio":
         - Camión
         """
     )
+    # ========================================================
+# OBJETOS ADICIONALES
+# ========================================================
+
+st.markdown(
+    """
+    ### 🔎 Objetos adicionales reconocidos
+
+    Para estos objetos VisionMove puede indicar
+    **qué objeto es, su posición y su nivel de alerta**,
+    aunque no se calcula distancia aproximada.
+
+    **Animales**
+    - Pájaro
+    - Caballo
+    - Oveja
+    - Vaca
+    - Elefante
+    - Oso
+    - Cebra
+    - Jirafa
+
+    **Transporte**
+    - Tren
+    - Avión
+    - Bote
+
+    **Elementos de tránsito**
+    - Semáforo
+    - Señal de pare
+    - Parquímetro
+    - Hidrante
+
+    **Objetos personales**
+    - Bolso
+    - Paraguas
+    - Corbata
+
+    **Tecnología y hogar**
+    - Teclado
+    - Mouse
+    - Planta en maceta
+    - Microondas
+    - Refrigerador
+    - Reloj
+
+    **Deporte y recreación**
+    - Frisbee
+    - Pelota
+    - Patineta
+    - Tabla de surf
+    - Raqueta de tenis
+
+    **Otros**
+    - Taza
+    """
+)
 
 
     st.info(
